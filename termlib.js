@@ -1,5 +1,5 @@
 /*
-  termlib.js - JS-WebTerminal Object v1.58
+  termlib.js - JS-WebTerminal Object v1.59
 
   (c) Norbert Landsteiner 2003-2010
   mass:werk - media environments
@@ -159,6 +159,7 @@
   version 1.55  Fixed dead keys issue for Mac OS (Leapard & later), vowels only.
   version 1.56  Fixed new ESC issue for Safari.
   version 1.57  Fixed dead keys fix: now only for Safari/Mac, German (de-de).
+  version 1.59  Dropped dead keys fix, fixed backspace for Safari.
 
 */
 
@@ -179,7 +180,7 @@ var Terminal = function(conf) {
 Terminal.prototype = {
 // prototype definitions (save some 2k on indentation)
 
-version: '1.58 (original)',
+version: '1.59 (original)',
 
 Defaults: {
 	// dimensions
@@ -271,22 +272,6 @@ setInitValues: function() {
 	this.ctrlHandler=this.conf.ctrlHandler;
 	this.initHandler=this.conf.initHandler;
 	this.exitHandler=this.conf.exitHandler;
-	this._latsDeadKey=null;
-	this.emulateDeadKeys=false;
-	if (this.isMac && navigator.userAgent.indexOf('Safari')>=0) {
-		// check for any dead-keys dictionaries, if Safari/MacOSX > 10.4
-		var tg=Terminal.prototype.globals;
-		if (tg._macDeadKeys) {
-			this.emulateDeadKeys=true;
-		}
-		else if (tg._macDeadKeys===null) {
-			var matches=RegExp(/OS\ X\ ([0-9]+)_([0-9])\S*?;/).exec(navigator.userAgent);
-			if (matches && (matches[1]>10 || matches[2]>4)) {
-				tg._macDeadKeys=tg._macDeadKeysByLanguage[navigator.language];
-				this.emulateDeadKeys=(tg._macDeadKeys!=null)? true:false;
-			}
-		}
-	}
 },
 
 defaultHandler: function() {
@@ -2363,7 +2348,6 @@ globals: {
 	setFocus: function(termref) {
 		Terminal.prototype.globals.activeTerm=termref;
 		Terminal.prototype.globals.clearRepeatTimer();
-		termref._latsDeadKey = null;
 	},
 
 	termKey: {
@@ -2433,97 +2417,6 @@ globals: {
 		var k=tg.termKey;
 		for (var i in m) r['DOM_VK_'+i]=k[m[i]];
 	},
-	// mac os dead key implementation (Leopard & later)
-	_macDeadKeys: null,
-	_macDeadKeysByLanguage: {
-		'de-de': {
-			'altKey': {
-				'78': {  // option n
-					'any': {
-						'32': 126 // tilde
-					},
-					'plain': {
-						'78': 241 // n: ntilde
-					},
-					'shiftKey': {
-						'78': 209 // N: Ntilde
-					},
-					'other': 126  // tilde + letter
-				}
-			},
-			'shiftKey': {
-				'187': { // acute
-					'any': {
-						'32': 96  // blank: backtick
-					},
-					'plain': {
-						'65': 224, // a: agrave
-						'69': 232, // e: egrave
-						'73': 236, // i
-						'79': 242, // o
-						'85': 249  // u
-					},
-					'shiftKey': {
-						'65': 192, // A: Agrave
-						'69': 200, // E: Egrave
-						'73': 204, // I
-						'79': 210, // O
-						'85': 217  // U
-					},
-					'other': 96    // backtick + letter
-				}
-			},
-			'plain': {
-				'187': { // acute
-					'any': {
-						'32': 180  // blank: acute
-					},
-					'plain': {
-						'65': 225, // a: aacute
-						'69': 233, // e: eacute
-						'73': 237, // i
-						'79': 243, // o
-						'85': 250  // u
-					},
-					'shiftKey': {
-						'65': 193, // A: Aacute
-						'69': 201, // E: Eacute
-						'73': 205, // I
-						'79': 211, // O
-						'85': 218  // U
-					},
-					'other': 180   // acute + letter
-				},
-				'192': { // circonflex
-					'any': {
-						'32': 94  // blank: circonflex
-					},
-					'plain': {
-						'65': 226, // a
-						'69': 234, // e
-						'73': 238, // i
-						'79': 244, // o
-						'85': 251  // u
-					},
-					'shiftKey': {
-						'65': 194, // A
-						'69': 202, // E
-						'73': 206, // I
-						'79': 212, // O
-						'85': 219  // U
-					},
-					'other': 94   // circonflex + letter
-				}
-			},
-			'ignore': {
-				'16': true, // shift
-				'18': true, // alt
-				'91': true, // meta
-				'17': true  // ctrl
-				
-			}
-		}
-	},
 	
 	registerEvent: function(obj, eventType, handler, capture) {
 		if (obj.addEventListener) {
@@ -2586,82 +2479,6 @@ globals: {
 		var term=tg.activeTerm;
 		var ch;
 		if ((tg.keylock) || (term.lock)) return true;
-		if (term.emulateDeadKeys && e && !e.MetaKey && !e.CtrlKey) {
-			ch=e.keyCode;
-			if (!tg._macDeadKeys.ignore[ch]) {
-				var keymode;
-				if (e.shiftKey) {
-					keymode='shiftKey';
-				}
-				else if (e.altKey) {
-					keymode='altKey';
-				}
-				else {
-					keymode='plain';
-				}
-				if (!term._latsDeadKey) {
-					if (e._remapped) {
-						tg.keyHandler(e);
-						return false;
-					}
-					var mdkmode = tg._macDeadKeys[keymode];
-					if (mdkmode) {
-						var mdk=mdkmode[ch];
-						if (mdk) {
-							term._latsDeadKey= [mdk, ch];
-							if (e.preventDefault) e.preventDefault();
-							if (e.stopPropagation) e.stopPropagation();
-							e.cancelBubble=true;
-							return false;
-						}
-					}
-				}
-				else if (!e._remapped) {
-					var mdk1=term._latsDeadKey[0];
-					term._latsDeadKey = null;
-					var mdk2=mdk1[keymode];
-					if (mdk2 && mdk2[ch]) {
-						tg.keyHandler({which: mdk2[ch],_remapped:true,_repeat:false});
-						if (e.preventDefault) e.preventDefault();
-						if (e.stopPropagation) e.stopPropagation();
-						e.cancelBubble=true;
-						return false;
-					}
-					if (mdk1.any && mdk1.any[ch]) {
-						tg.keyHandler({which: mdk1.any[ch],_remapped:true,_repeat:false});
-						if (e.preventDefault) e.preventDefault();
-						if (e.stopPropagation) e.stopPropagation();
-						e.cancelBubble=true;
-						return false;
-					}
-					else if (mdk1.other) {
-						tg.keyHandler({which: mdk1.other,_remapped:true,_repeat:false});
-						if (e.preventDefault) e.preventDefault();
-						if (e.stopPropagation) e.stopPropagation();
-						e.cancelBubble=true;
-						if (!tg._macDeadKeys[keymode] || !tg._macDeadKeys[keymode][ch]) {
-							var str = String.fromCharCode(ch);
-							if (str && !e.shiftKey) ch = str.toLowerCase().charCodeAt(0);
-							var e2 = {
-								keyCode: ch,
-								which: ch,
-								shiftKey: Boolean(e.shiftKey),
-								altKey: Boolean(e.altKey),
-								controlKey: Boolean(e.controlKey),
-								metaKey: Boolean(e.metaKey),
-								_remapped: true,
-								_repeat: false
-							}
-							window.setTimeout( function() { tg.keyFix(e2); }, 1);
-						}
-						return false;
-					}
-				}
-				else {
-					term._latsDeadKey = null;
-				}
-			}
-		}
 		if (window.event) {
 			if  (!e) e=window.event;
 			ch=e.keyCode;
@@ -2682,7 +2499,7 @@ globals: {
 				// no DOM support
 				var termKey=term.termKey;
 				var keyHandler=tg.keyHandler;
-				if ((ch==8) && (term.isChrome || (!term.isSafari && !term.isOpera))) { keyHandler({which:termKey.BS,_remapped:true,_repeat:true}); }
+				if (ch==8 && !term.isOpera) { keyHandler({which:termKey.BS,_remapped:true,_repeat:true}); }
 				else if (ch==9) { keyHandler({which:termKey.TAB,_remapped:true,_repeat: (term.printTab)? false:true}); }
 				else if (ch==27) { keyHandler({which:termKey.ESC,_remapped:true,_repeat: (term.printTab)? false:true}); }
 				else if (ch==37) { keyHandler({which:termKey.LEFT,_remapped:true,_repeat:true}); }
@@ -2690,7 +2507,7 @@ globals: {
 				else if (ch==38) { keyHandler({which:termKey.UP,_remapped:true,_repeat:true}); }
 				else if (ch==40) { keyHandler({which:termKey.DOWN,_remapped:true,_repeat:true}); }
 				else if (ch==127 || ch==46) { keyHandler({which:termKey.DEL,_remapped:true,_repeat:true}); }
-				else if ((ch>=57373) && (ch<=57376)) {
+				else if (ch>=57373 && ch<=57376) {
 					if (ch==57373) { keyHandler({which:termKey.UP,_remapped:true,_repeat:true}); }
 					else if (ch==57374) { keyHandler({which:termKey.DOWN,_remapped:true,_repeat:true}); }
 					else if (ch==57375) { keyHandler({which:termKey.LEFT,_remapped:true,_repeat:true}); }
