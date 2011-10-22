@@ -1062,7 +1062,6 @@ cursorOff: function() {
 cursorLeft: function() {
 	var crsron=this.cursoractive;
 	if (crsron) this.cursorOff();
-	/* XXX TEMP, until I find PgUp
 	var r=this.r;
 	var c=this.c;
 	if (c>0) {
@@ -1078,15 +1077,11 @@ cursorLeft: function() {
 	}
 	this.insert=true;
 	this._cursorReset(crsron);
-	*/
-	// TODO Checkme/remove
-	this.historyScroll(-1);
 },
 
 cursorRight: function() {
 	var crsron=this.cursoractive;
 	if (crsron) this.cursorOff();
-	/* XXX TEMP, until I find PgDn
 	var r=this.r;
 	var c=this.c;
 	if (c<this.maxCols-1) {
@@ -1104,9 +1099,6 @@ cursorRight: function() {
 		this.c=c;
 	}
 	this._cursorReset(crsron);
-	*/
-	// TODO Checkme/remove
-	this.historyScroll(1);
 },
 
 backspace: function() {
@@ -2393,7 +2385,9 @@ globals: {
 		'LEFT': 0x1C,
 		'RIGHT': 0x1D,
 		'UP': 0x1E,
-		'DOWN': 0x1F
+		'DOWN': 0x1F,
+		'PageUp':0x21,
+		'PageDn':0x22
 	},
 
 	// map some DOM_VK_* properties to values defined in termKey
@@ -2502,6 +2496,8 @@ globals: {
 				if (ch==8 && !term.isOpera) { keyHandler({which:termKey.BS,_remapped:true,_repeat:true}); }
 				else if (ch==9) { keyHandler({which:termKey.TAB,_remapped:true,_repeat: (term.printTab)? false:true}); }
 				else if (ch==27) { keyHandler({which:termKey.ESC,_remapped:true,_repeat: (term.printTab)? false:true}); }
+				else if (ch==33) { keyHandler({which:termKey.PageUp,_remapped:true,_repeat:true}); }
+				else if (ch==34) { keyHandler({which:termKey.PageDn,_remapped:true,_repeat:true}); }
 				else if (ch==37) { keyHandler({which:termKey.LEFT,_remapped:true,_repeat:true}); }
 				else if (ch==39) { keyHandler({which:termKey.RIGHT,_remapped:true,_repeat:true}); }
 				else if (ch==38) { keyHandler({which:termKey.UP,_remapped:true,_repeat:true}); }
@@ -2729,6 +2725,17 @@ globals: {
 					else {
 						term.fwdDelete();
 					}
+					if (window.event) window.event.cancelBubble=true;
+					return false;
+				}
+				// TODO Proper page scrolling (by page size amount)
+				else if (ch==termKey.PageUp) {
+					term.historyScroll(-10);
+					if (window.event) window.event.cancelBubble=true;
+					return false;
+				}
+				else if (ch==termKey.PageDn) {
+					term.historyScroll(10);
 					if (window.event) window.event.cancelBubble=true;
 					return false;
 				}
