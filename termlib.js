@@ -2427,6 +2427,7 @@ globals: {
 			obj['on'+eventType.toLowerCase()]=handler;
 		}
 	},
+
 	releaseEvent: function(obj, eventType, handler, capture) {
 		if (obj.removeEventListener) {
 			obj.removeEventListener(eventType.toLowerCase(), handler, capture);
@@ -2444,12 +2445,42 @@ globals: {
 		}
 	},
 
+	scrollWheel: function(e) {
+		var delta = 0;
+		var pixelsPerEvent = 40;
+		var elementId = 'thumbnails';
+
+		/* Delta is a multiple of 120 (except for Mozilla where it is a multiple of 3) */
+		/* In Opera and Mozilla the delta is negative compared to IE. */
+		if (!event) /* Get the event for IE. */
+			event = window.event;
+		if (event.wheelDelta) { /* IE/Opera. */
+			delta = event.wheelDelta/120;
+			if (window.opera)
+				delta = -delta;
+			} else if (event.detail) { /* Mozilla */
+			/* I'm not going to divide by 3 since Mozilla's scrolling is so slow. */
+			delta = -event.detail;
+		}
+
+		/* Act if delta != 0 */
+		if (delta) {
+			pixels = pixelsPerEvent * delta;
+			speed = delta * 5;
+
+			// Scroll Up/Down by calculated amount
+			term.historyScroll(delta*-2);
+		}
+	},
+
 	enableKeyboard: function(term) {
 		var tg=Terminal.prototype.globals;
 		if (!tg.kbdEnabled) {
 			tg.registerEvent(document, 'keypress', tg.keyHandler, true);
 			tg.registerEvent(document, 'keydown', tg.keyFix, true);
 			tg.registerEvent(document, 'keyup', tg.clearRepeatTimer, true);
+			tg.registerEvent(document, 'DOMMouseScroll', tg.scrollWheel, false); // Firefox scrollwheel
+			tg.registerEvent(document, 'mousewheel', tg.scrollWheel, false); // Everything else, except pre 9 IE
 			tg.kbdEnabled=true;
 		}
 		tg.activeTerm=term;
