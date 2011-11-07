@@ -44,7 +44,6 @@ var helpInfoList = [
 	' %c(4)*%c(0) Pop-up image viewer.',
 	' %c(4)*%c(0) Font size changer.',
 	' %c(4)*%c(0) Google Docs Query (for error detection).',
-	' %c(4)*%c(0) PHP Crawler Query.',
 	' %c(4)*%c(0) Crawler Query.',
 	' %c(4)*%c(0) General Queries.',
 	' %c(4)*%c(0) Error emailer (local database and remote database errors).',
@@ -338,10 +337,9 @@ function mainRestart() {
 	this.helpInfo = "Restarts the terminal, displaying the opening information.";
 	this.queries = [];
 
+	// In truth, this is just a refresh :P
 	this.main = function() {
-		// TODO Refresh page
-		term.clear();
-		term.write(motdIntro);
+		window.location.reload()
 	}
 }
 
