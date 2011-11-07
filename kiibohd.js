@@ -618,3 +618,59 @@ function linkDisplay(item) {
 	term.write( "%+m" + item.webLink + "%-m%+n" + item.Name + "%-n - " + item.Description + "%n" );
 }
 
+// Browser Paste Handler unctions
+function handlepaste (elem, e) {
+	var savedcontent = elem.innerHTML;
+
+	// Webkit - get data from clipboard, put into editdiv, cleanup, then cancel event
+	if (e && e.clipboardData && e.clipboardData.getData) {
+		if (/text\/html/.test(e.clipboardData.types)) {
+			elem.innerHTML = e.clipboardData.getData('text/html');
+		}
+		else if (/text\/plain/.test(e.clipboardData.types)) {
+			elem.innerHTML = e.clipboardData.getData('text/plain');
+		}
+		else {
+			elem.innerHTML = "";
+		}
+		waitforpastedata(elem, savedcontent);
+		if (e.preventDefault) {
+			e.stopPropagation();
+			e.preventDefault();
+		}
+		return false;
+	}
+	// Everything else - empty editdiv and allow browser to paste content into it, then cleanup
+	else {
+		elem.innerHTML = "";
+		waitforpastedata(elem, savedcontent);
+		return true;
+	}
+}
+
+function waitforpastedata (elem, savedcontent) {
+	if (elem.childNodes && elem.childNodes.length > 0) {
+		processpaste(elem, savedcontent);
+	}
+	else {
+		that = {
+			e: elem,
+			s: savedcontent
+			}
+		that.callself = function () {
+			waitforpastedata(that.e, that.s)
+		}
+		setTimeout(that.callself,20);
+	}
+}
+
+function processpaste (elem, savedcontent) {
+	pasteddata = elem.innerHTML;
+	//^^Alternatively loop through dom (elem.childNodes or elem.getElementsByTagName) here
+
+	elem.innerHTML = savedcontent;
+
+	// Do whatever with gathered data;
+	term.write( pasteddata );
+}
+

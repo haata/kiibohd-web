@@ -90,3 +90,7 @@ tt,pre {
 	}
 }
 
+:focus {
+	outline: none;
+}
+
