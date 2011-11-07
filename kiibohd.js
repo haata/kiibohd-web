@@ -43,7 +43,6 @@ var helpInfoList = [
 	' %c(4)*%c(0) Terminal Scrolling bug fixes',
 	' %c(4)*%c(0) Pop-up image viewer.',
 	' %c(4)*%c(0) Font size changer.',
-	' %c(4)*%c(0) Google Docs Query (for error detection).',
 	' %c(4)*%c(0) Crawler Query.',
 	' %c(4)*%c(0) General Queries.',
 	' %c(4)*%c(0) Error emailer (local database and remote database errors).',
@@ -80,7 +79,10 @@ var colorTable = [
 
 // Resize Terminal on Browser resize
 window.onresize = function() {
-	term.redimension();
+	// XXX This functionally breaks the scroll buffer currently, really needs a rework...
+	//term.redimension();
+	// Refreshing will do a proper resize, but is sort've lazy...
+	//window.location.reload()
 }
 
 function termOpen() {
