@@ -1,6 +1,6 @@
 #!/bin/bash
 
-scp -r * haata@kiibohd.com:html/mk2/.
+scp -i ~/.ssh/pl_id_rsa -r * haata@kiibohd.com:html/.
 
 exit 0
 
