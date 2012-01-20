@@ -1,0 +1,6 @@
+#!/bin/bash
+
+scp -r * haata@kiibohd.com:html/mk2/.
+
+exit 0
+

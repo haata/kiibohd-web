@@ -108,6 +108,7 @@ function termOpen() {
 	addCmd("reset",     new mainReset   ());
 	addCmd("restart",   new mainRestart ());
 	addCmd("termsize",  new termSizeInfo());
+	addCmd("test",      new testCmd     ());
 
 	if ((!term) || (term.closed)) {
 		term = new Terminal(
@@ -442,6 +443,19 @@ function newsQuery() {
 	}
 }
 
+// TODO Removeme
+function testCmd() {
+	this.help = "TODO Write help...";
+	this.regex = /^\s*test\s?.*/i;
+	this.type = "Query Functions";
+	this.helpInfo = "Test...";
+	this.queries = [];
+
+	this.main = function() {
+		ajaxTest();
+	}
+}
+
 // TODO Item is defined by PHP
 function item() {
 	// TODO Attempt to use inheritance here
@@ -674,5 +688,30 @@ function processpaste (elem, savedcontent) {
 
 	// Do whatever with gathered data;
 	term.write( pasteddata );
+}
+
+// AJAX Queries
+function ajaxTest() {
+	var xmlhttp;
+
+	// code for IE7+, Firefox, Chrome, Opera, Safari
+	if (window.XMLHttpRequest) {
+		xmlhttp=new XMLHttpRequest();
+	}
+	// code for IE6, IE5
+	else {
+		xmlhttp=new ActiveXObject("Microsoft.XMLHTTP");
+	}
+
+	xmlhttp.onreadystatechange=function() {
+		if (xmlhttp.readyState==4 && xmlhttp.status==200) {
+			term.write( xmlhttp.responseText );
+			//term.write("EEE");
+			//document.getElementById("myDiv").innerHTML=xmlhttp.responseText;
+		}
+		//term.write("AAA");
+	}
+	xmlhttp.open("GET","mk2/query.cgi",true);
+	xmlhttp.send();
 }
 

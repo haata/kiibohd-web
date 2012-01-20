@@ -1882,6 +1882,9 @@ historyScroll : function(move) {
 	   || ( move < 0 && this.historyBuf.viewRow <= this.maxLines ) )
 		return;
 
+	// Disable the blinking cursor (to prevent screen garbage) TODO
+	//this.crsrBlinkMode = false;
+
 	// Adjust move parameter if needed, after applying it
 	var actualMove = this.historyBuf.viewRow + move;
 	if ( actualMove >= this.historyBuf.row )
