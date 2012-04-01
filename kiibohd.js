@@ -77,6 +77,9 @@ var colorTable = [
 	' 1m '+ansiExpression(1)+'bold'+ansiExpression(22)+', 3m '+ansiExpression(3)+'italics'+ansiExpression(23)+', 4m '+ansiExpression(4)+'underline'+ansiExpression(24)+', 7m '+ansiExpression(7)+'negative image'+ansiExpression(27)+', 9m '+ansiExpression(9)+'crossed out'+ansiExpression(29)+',%n 21m '+ansiExpression(21)+'underline double'+ansiExpression(24)
 ];
 
+// Variable for storing the URI history
+var historyURI = [];
+
 // Resize Terminal on Browser resize
 window.onresize = function() {
 	// XXX This functionally breaks the scroll buffer currently, really needs a rework...
@@ -85,7 +88,130 @@ window.onresize = function() {
 	//window.location.reload()
 }
 
-function termOpen() {
+// Send a external function request to the server
+function externalFunctionsRequest()
+{
+	var externalScript = document.location.protocol + "//" + document.location.host + "/scripts/externalFunctions.cgi";
+	term.send(
+		{
+			url: externalScript,
+			callback: externalFunctionsRx
+		}
+	);
+}
+
+// Callback on AJAX call for externally referenced functions
+var externalFunctionsReady = false;
+var startupCommands = "";
+function externalFunctionsRx()
+{
+	if (this.socket.success)
+	{
+		// JSON.parse isn't guarranteed in all browsers... (at least pre-2009)
+		var extFuncData = JSON.parse( this.socket.responseText );
+		for ( c = 0; c < extFuncData.id.length; c++ )
+		{
+			// Build new function descriptor for each of the new external functions
+			addCmd( extFuncData.id[c].name, new function()
+			{
+				this.help = extFuncData.id[c].help;
+				this.regex = new RegExp( extFuncData.id[c].regex.replace( /\\\\/ig, "\\" ), "i" );
+				this.type = extFuncData.id[c].type;
+				this.helpInfo = extFuncData.id[c].helpinfo;
+				this.name = extFuncData.id[c].name;
+				var formatter = extFuncData.id[c].formatter;
+				this.queries = [];
+
+				// Send information to cgi script, and wait for query
+				this.main = function(args)
+				{
+					var externalScript = document.location.protocol + "//" + document.location.host + "/scripts/" + extFuncData.id[c].script;
+					term.send(
+						{
+							url: externalScript,
+							data: {
+								query: args,
+								table: this.name
+							},
+							callback: this.callback
+						}
+					);
+				}
+
+				// Callback for external function cgi script
+				this.callback = function()
+				{
+					// Check for recieve success
+					if (this.socket.success)
+					{
+						var funcFormatter = window[ formatter ];
+						
+						// Make sure the formatter function actually exists
+						if ( typeof funcFormatter == 'function' )
+						{
+							this.write( this.socket.responseText ); // Debug
+
+							// JSON.parse isn't guarranteed in all browsers... (at least pre-2009)
+							var requestedData = JSON.parse( this.socket.responseText );
+
+							// Display title, only if there are items
+							if ( requestedData.element.length > 0 )
+							{
+								term.write( '%n' );
+							}
+							for ( c = 0; c < requestedData.element.length; c++ )
+							{
+								// Pass JSON element to formatter
+								funcFormatter( requestedData.element[c] );
+							}
+						}
+					}
+
+					// Bad AJAX return
+					else
+					{
+						this.write('OOPS: ' + this.socket.status + ' ' + this.socket.statusText);
+						if (this.socket.errno)
+						{
+							this.newLine();
+							this.write('Error: ' + this.socket.errstring);
+						}
+					}
+				}
+			} );
+		}
+
+		// External functions ready, start terminal
+		term.open();
+		// dimm UI text
+		var mainPane = (document.getElementById)?
+			document.getElementById('mainPane') : document.all.mainPane;
+		if (mainPane) mainPane.className = 'lh15 dimmed';
+
+		// Update the tab complete reference
+		term.tabCompletesUpdate(cmdList);
+
+		// The terminal is ready, now send the passed input parameters
+		var cmdArray = startupCommands.split("++");
+		for ( c = 0; c < cmdArray.length; c++ )
+		{
+			cmdLink( cmdArray[c] );
+		}
+	}
+
+	// Bad AJAX return
+	else
+	{
+		this.write('OOPS: ' + this.socket.status + ' ' + this.socket.statusText);
+		if (this.socket.errno)
+		{
+			this.newLine();
+			this.write('Error: ' + this.socket.errstring);
+		}
+	}
+}
+
+function termOpen(commands) {
 	TermGlobals.assignStyle( 16, 'b', '<b>', '</b>' ); // Bold enable
 
 	// So I don't have to modify a lot, you can use these two tags in conjunction for any arbitrary URL + text pattern
@@ -101,14 +227,12 @@ function termOpen() {
 	// Add the various commands used with Kiibohds (place in alphabetical order)
 	addCmd("about",     new aboutInfo   ());
 	addCmd("color",     new colorInfo   ());
-	addCmd("crawler",   new termCrawler ());
 	addCmd("help",      new mainHelp    ());
-	addCmd("news",      new newsQuery   ());
 	addCmd("queryhelp", new queryHelp   ());
+	addCmd("reload",    new mainReload  ());
 	addCmd("reset",     new mainReset   ());
 	addCmd("restart",   new mainRestart ());
 	addCmd("termsize",  new termSizeInfo());
-	addCmd("test",      new testCmd     ());
 
 	if ((!term) || (term.closed)) {
 		term = new Terminal(
@@ -123,7 +247,8 @@ function termOpen() {
 				ANSItrueBlack: false,
 				printTab: false,
 				historyUnique: true,
-				crsrBlinkMode: true,
+				crsrBlinkMode: false,
+				//crsrBlinkMode: true, // Blinking cursor causes artifacts...probably could be fixed
 				closeOnESC: false,
 				initHandler: termInitHandler,
 				handler: termHandler,
@@ -132,14 +257,11 @@ function termOpen() {
 			}
 		);
 
-		term.open();
-		// dimm UI text
-		var mainPane = (document.getElementById)?
-			document.getElementById('mainPane') : document.all.mainPane;
-		if (mainPane) mainPane.className = 'lh15 dimmed';
+		// Prepare the input command list to be sent to the terminal screen once it has loaded
+		startupCommands = commands;
 
-		// Update the tab complete reference
-		term.tabCompletesUpdate(cmdList);
+		// This requests callback, which then loads the terminal
+		externalFunctionsRequest();
 	}
 }
 
@@ -160,7 +282,7 @@ function termInitHandler() {
 	var quote = new item(); // TODO retrieve quote
 
 	// Display random quote
-	randomQuoteDisplay( quote );
+	//randomQuoteDisplay( quote ); TODO Get quote
 
 	// Display basic help
 	this.write(introHelp);
@@ -180,16 +302,38 @@ function termHandler() {
 			// Check for -h/--help
 			if (this.lineBuffer.search(/.*\s(-h|--help)(\s.*|$)/i) == 0)
 				this.write(cmdList[c].func.help);
-			// Otherwise, run command
-			else	cmdList[c].func.main();
+			// Otherwise, run command, sending the arguments to be processed, if needed
+			else	cmdList[c].func.main( this.lineBuffer );
 			break;
 		}
 	}
 
-	// Command Not Found
-	if (this.lineBuffer != '' && c == cmdList.length) {
-		this.write('%c(5)kiibohds%c(0): command not found: ' + this.lineBuffer);
-		this.newLine();
+	// Not a blank newline
+	if (this.lineBuffer != '' )
+	{
+		// Command Not Found
+		if ( c == cmdList.length)
+		{
+			this.write('%c(5)kiibohds%c(0): command not found: ' + this.lineBuffer);
+			this.newLine();
+		}
+		// Command Found - Add to URI history
+		else
+		{
+			// Add to history
+			historyURI.push( this.lineBuffer );
+
+			var newTitle = "Kiibohds - " + this.lineBuffer;
+			var newURI = historyURI[0];
+
+			for ( c = 1; c < historyURI.length; c++ )
+			{
+				newURI = newURI + "++" + historyURI[c];
+			}
+
+			// Replace the URL, if HTML 5 is supported (otherwise nothing happens)
+			window.history.replaceState( null, newTitle, newURI );
+		}
 	}
 
 	this.prompt();
@@ -244,7 +388,7 @@ function mainHelp() {
 	// Output variable
 	var outputText = [];
 
-	this.main = function() {
+	this.main = function(args) {
 		// Title
 		outputText.push('%n %+b-%-b %c(5)%+bKiibohds Command Help%-b%c(0) %+b-%-b %n');
 
@@ -316,7 +460,7 @@ function mainReset() {
 	this.helpInfo = "Clears the screen.";
 	this.queries = [];
 
-	this.main = function() {
+	this.main = function(args) {
 		term.clear();
 	}
 }
@@ -328,20 +472,36 @@ function colorInfo() {
 	this.helpInfo = "General color information (colour).";
 	this.queries = [];
 
-	this.main = function() {
+	this.main = function(args) {
 		term.write(colorTable);
 	}
 }
 
 function mainRestart() {
-	this.help = "Well, type reset, it does stuff...erm erases, then reprints the intro :D.";
+	this.help = "Well, type restart, it does stuff...erm erases, then reprints the intro :D.";
 	this.regex = /^\s*restart\s?.*/i;
 	this.type = "Terminal Functions";
 	this.helpInfo = "Restarts the terminal, displaying the opening information.";
 	this.queries = [];
 
 	// In truth, this is just a refresh :P
-	this.main = function() {
+	this.main = function(args) {
+		// XXX There are better ways to do this, oh well :P
+		//window.history.replaceState( null, "Kiibohds", "" );
+		//window.location.reload()
+		window.location = "http://kiibohd.com"; // XXX Should be less static...
+	}
+}
+
+function mainReload() {
+	this.help = "Well, type reload, does the same thing as refreshing the page...";
+	this.regex = /^\s*reload\s?.*/i;
+	this.type = "Terminal Functions";
+	this.helpInfo = "Reloads the page, re-entering your entire working history until this point.";
+	this.queries = [];
+
+	// In truth, this is just a refresh :P
+	this.main = function(args) {
 		window.location.reload()
 	}
 }
@@ -353,7 +513,7 @@ function termSizeInfo() {
 	this.helpInfo = "Displays various statistics about the terminal size.";
 	this.queries = [];
 
-	this.main = function() {
+	this.main = function(args) {
 		term.redimension('1');
 	}
 }
@@ -393,7 +553,7 @@ function aboutInfo() {
 
 	];
 
-	this.main = function() {
+	this.main = function(args) {
 		term.write( this.aboutDisplay );
 	}
 }
@@ -409,23 +569,52 @@ function queryHelp() {
 	'%n %+b-%-b %c(5)%+bGeneral Query Help and Information%-b%c(0) %+b-%-b %n',
 	];
 
-	this.main = function() {
+	this.main = function(args) {
 		term.write( this.queryHelpDisply );
 	}
 }
 
-function termCrawler() {
-	this.help = "TODO Write help...";
-	this.regex = /^\s*crawler\s?.*/i;
-	this.type = "Query Functions";
-	this.helpInfo = "Extensive query of the site database in a single dump of information.";
-	this.queries = [];
 
-	this.main = function() {
-		// Do a complete query of the database
-		// This queries all of the available tables
-	}
+// - Formatter Functions -
+
+// Device Formatter
+function deviceFormat(element)
+{
 }
+
+function switchFormat(element)
+{
+}
+
+function newsFormat(element)
+{
+}
+
+function linkFormat(element)
+{
+	term.write( '%+m' + element.link + '%-m%+n' + element.name + '%-n%n  [%c(13)%+b' + element.type + '%-b%c(0)] ' );
+
+	// Pad spaces for alignment (9 is arbitrary, as we aren't given enough context to decide here)
+	for ( var c=element.type.length; c < 9; c++ ) {
+		term.write( ' ' );
+	}
+
+	// Only display if there is data
+	if ( element.description.length > 0 )
+		term.write( ': ' + element.description + '%n' );
+	else
+		term.write( '%n' );
+}
+
+function crawlerFormat(element)
+{
+}
+
+function articleFormat(element)
+{
+	term.write('%+u<' + element.date + '> - %c(13)%+b' + element.title + '%-b%c(0) - [' + element.author + ']%-u%n%n' + item.content + '%n%n');
+}
+
 
 // TODO this should be generated by the PHP
 function newsQuery() {
@@ -435,24 +624,11 @@ function newsQuery() {
 	this.helpInfo = "Information about this website/terminal and its updates.";
 	this.queries = [];
 
-	this.main = function() {
+	this.main = function(args) {
 		// Parse arguments to decide which and how many news entries to display
 		newsQueryDisplay( new item() );
 		linkDisplay( new item() );
 		keyboardQueryDisplay( new item() );
-	}
-}
-
-// TODO Removeme
-function testCmd() {
-	this.help = "TODO Write help...";
-	this.regex = /^\s*test\s?.*/i;
-	this.type = "Query Functions";
-	this.helpInfo = "Test...";
-	this.queries = [];
-
-	this.main = function() {
-		ajaxTest();
 	}
 }
 
